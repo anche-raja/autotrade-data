@@ -1,0 +1,48 @@
+[project]
+name = "autotrade-data"
+version = "0.1.0"
+description = "IBKR market data collection pipeline — bars, news, breadth → Parquet + DuckDB"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "ib_async>=1.0.0",
+    "pyarrow>=15.0.0",
+    "duckdb>=0.10.0",
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "pyyaml>=6.0",
+    "pytz>=2025.2",
+    "rich>=13.0.0",
+    "python-dotenv>=1.0.0",
+    "typer[all]>=0.9.0",
+    "pandas-market-calendars>=4.3.0",
+]
+
+[project.scripts]
+marketdata = "marketdata.cli:app"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.3.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["marketdata"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

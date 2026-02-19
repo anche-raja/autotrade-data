@@ -1,0 +1,32 @@
+# IBKR Market Data Pipeline Configuration
+# -----------------------------------------
+# Override any value via environment variables prefixed with MD_
+# e.g. MD_IB_HOST=10.0.0.5  MD_IB_PORT=4001
+
+ib_host: "127.0.0.1"
+ib_port: 7497
+ib_client_id: 10
+
+data_dir: "data"
+
+# Regular Trading Hours session (America/New_York)
+rth_only: true
+session_start: "09:30"
+session_end: "16:00"
+timezone: "America/New_York"
+
+# Pacing limits (IBKR documented constraints)
+pacing:
+  max_requests_per_10min: 60
+  max_identical_wait_sec: 15
+  max_same_contract_per_2sec: 6
+  retry_max_attempts: 5
+  retry_base_delay_sec: 2.0
+  retry_max_delay_sec: 60.0
+
+# 5-sec bar availability horizon (months back from today)
+five_sec_availability_months: 6
+
+# News API keys (set via env vars: MD_BENZINGA_API_KEY, MD_FINNHUB_API_KEY)
+benzinga_api_key: ""
+finnhub_api_key: ""
