@@ -39,7 +39,7 @@ class PipelineConfig(BaseSettings):
     )
 
     ib_host: str = "127.0.0.1"
-    ib_port: int = 4002
+    ib_port: int = 7497
     ib_client_id: int = 10
 
     data_dir: str = "data"
@@ -52,10 +52,6 @@ class PipelineConfig(BaseSettings):
     pacing: PacingConfig = Field(default_factory=PacingConfig)
 
     five_sec_availability_months: int = 6
-
-    # News API keys (override via MD_BENZINGA_API_KEY, MD_FINNHUB_API_KEY)
-    benzinga_api_key: str = ""
-    finnhub_api_key: str = ""
 
     # ---- derived helpers ----
 

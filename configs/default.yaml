@@ -26,7 +26,3 @@ pacing:
 
 # 5-sec bar availability horizon (months back from today)
 five_sec_availability_months: 6
-
-# News API keys (set via env vars: MD_BENZINGA_API_KEY, MD_FINNHUB_API_KEY)
-benzinga_api_key: ""
-finnhub_api_key: ""

@@ -20,13 +20,10 @@ import sys
 import time
 from pathlib import Path
 
-# Ensure project root is on path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 from marketdata.config import load_config
 from marketdata.utils.log import setup_logging
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOG_FILE = PROJECT_ROOT / "data" / "logs" / "daily_fetch.log"
 
 # --- Configuration ---

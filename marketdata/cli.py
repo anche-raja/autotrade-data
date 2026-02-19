@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from typing import Optional
 
 import typer
 from rich.table import Table
@@ -260,8 +259,6 @@ def fetch_news(
 def validate(
     symbols: str = typer.Option("SPY,QQQ", help="Comma-separated symbols"),
     bar_sizes: str = typer.Option("1min,5sec", help="Comma-separated bar sizes"),
-    start: Optional[str] = typer.Option(None, help="Start date YYYY-MM-DD (optional)"),
-    end: Optional[str] = typer.Option(None, help="End date YYYY-MM-DD (optional)"),
     log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
 ) -> None:
     """Validate ingested data and report coverage + gaps."""
@@ -374,26 +371,3 @@ def validate(
     db.close()
 
 
-# ------------------------------------------------------------------
-# web (launch the news browser UI)
-# ------------------------------------------------------------------
-
-
-@app.command()
-def web(
-    host: str = typer.Option("0.0.0.0", help="Bind address"),
-    port: int = typer.Option(8501, help="Port"),
-    log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
-) -> None:
-    """Launch the Market News Browser web UI."""
-    import uvicorn
-
-    setup_logging(log_level)
-    log = get_logger(__name__)
-    log.info("Starting Market News Browser on http://%s:%d", host, port)
-    uvicorn.run(
-        "newsweb.app:app",
-        host=host,
-        port=port,
-        log_level=log_level.lower(),
-    )

@@ -174,11 +174,14 @@ class MetadataDB:
             "DELETE FROM gaps WHERE symbol = ? AND bar_size = ? AND date = ?",
             [symbol, bar_size, date],
         )
-        for g in gaps:
-            self._con.execute(
+        if gaps:
+            self._con.executemany(
                 """INSERT INTO gaps (symbol, bar_size, date, gap_start_utc, gap_end_utc, gap_type)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                [symbol, bar_size, date, g.gap_start_utc, g.gap_end_utc, g.gap_type],
+                [
+                    [symbol, bar_size, date, g.gap_start_utc, g.gap_end_utc, g.gap_type]
+                    for g in gaps
+                ],
             )
 
     def get_gaps_summary(

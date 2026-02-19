@@ -92,12 +92,12 @@ def write_partition(df: pd.DataFrame, path: Path, schema: pa.Schema = BAR_SCHEMA
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Ensure required columns exist with defaults
-    if "source" not in df.columns:
+    if "source" not in df.columns or "quality_flags" not in df.columns:
         df = df.copy()
-        df["source"] = "ibkr"
-    if "quality_flags" not in df.columns:
-        df = df.copy()
-        df["quality_flags"] = "ok"
+        if "source" not in df.columns:
+            df["source"] = "ibkr"
+        if "quality_flags" not in df.columns:
+            df["quality_flags"] = "ok"
     if "count" in df.columns:
         df["count"] = df["count"].fillna(0).astype("int32")
 

@@ -145,10 +145,11 @@ class BreadthProvider:
         ticker = ib.reqMktData(contract)
 
         samples: list[dict] = []
-        end_time = asyncio.get_event_loop().time() + duration_min * 60
+        loop = asyncio.get_running_loop()
+        end_time = loop.time() + duration_min * 60
 
         try:
-            while asyncio.get_event_loop().time() < end_time:
+            while loop.time() < end_time:
                 await asyncio.sleep(interval_sec)
                 now_utc = dt.datetime.now(dt.timezone.utc)
 

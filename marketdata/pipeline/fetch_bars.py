@@ -18,7 +18,7 @@ from marketdata.ibkr.client import IBKRClient
 from marketdata.ibkr.contracts import get_bar_contract
 from marketdata.pipeline.chunking import plan_chunks
 from marketdata.pipeline.quality import Gap, validate_partition
-from marketdata.pipeline.storage import bars_partition_path, write_partition
+from marketdata.pipeline.storage import _normalize_bar_label, bars_partition_path, write_partition
 from marketdata.utils.log import get_console, get_logger
 from marketdata.utils.time import get_trading_days, is_within_availability, rth_boundaries
 
@@ -47,7 +47,7 @@ async def fetch_bars(
         contract = get_bar_contract(symbol)
 
         for bar_size in bar_sizes:
-            bar_key = _normalize(bar_size)
+            bar_key = _normalize_bar_label(bar_size)
             result_key = f"{symbol}_{bar_key}"
             results[result_key] = 0
 
@@ -222,8 +222,3 @@ async def _fetch_day(
         db.insert_gaps(symbol, bar_key, day, gaps)
 
     return len(cleaned)
-
-
-def _normalize(bar_size: str) -> str:
-    mapping = {"1 min": "1min", "1min": "1min", "5 secs": "5sec", "5sec": "5sec", "5s": "5sec"}
-    return mapping.get(bar_size, bar_size)

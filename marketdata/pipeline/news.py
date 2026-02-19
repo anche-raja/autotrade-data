@@ -207,8 +207,11 @@ class IBKRNewsProvider:
                 )
                 if art and art.articleText:
                     return art.articleText
-            except Exception:
-                pass
+            except Exception as exc:
+                log.debug(
+                    "Body fetch failed for %s/%s: %s",
+                    provider_code, article_id, exc,
+                )
             finally:
                 ib.RequestTimeout = prev_timeout
             return ""
