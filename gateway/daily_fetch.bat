@@ -4,7 +4,7 @@ REM Runs after market close to pull today's bars and news
 REM
 REM Prerequisites: TWS must be running with API enabled on port 7497
 
-cd /d "C:\Users\claw\autotrade-data"
+cd /d "C:\Users\claw\auto-trade\autotrade-data"
 uv run python gateway/daily_fetch.py --days 3 --log-level INFO
 
 if %ERRORLEVEL% NEQ 0 (

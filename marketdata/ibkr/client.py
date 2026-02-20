@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import Any
 
 import pandas as pd
@@ -26,6 +27,7 @@ class IBKRClient:
         self._cfg = cfg
         self._ib = IB()
         self.pacer = pacer or PacingEngine(cfg.pacing)
+        self._reconnect_callbacks: list[Callable] = []
         self._ib.disconnectedEvent += self._on_disconnect
 
     # ------------------------------------------------------------------
@@ -54,6 +56,11 @@ class IBKRClient:
                     readonly=True,
                 )
                 log.info("Reconnected to IBKR at %s:%s", self._cfg.ib_host, self._cfg.ib_port)
+                for cb in self._reconnect_callbacks:
+                    try:
+                        await cb()
+                    except Exception as exc:
+                        log.error("Reconnect callback failed: %s", exc)
                 return
             except Exception as exc:
                 log.error("Reconnect attempt %d failed: %s", attempt + 1, exc)
@@ -80,6 +87,69 @@ class IBKRClient:
     @property
     def ib(self) -> IB:
         return self._ib
+
+    def register_reconnect_callback(self, cb: Callable) -> None:
+        """Register an async callback to invoke after a successful reconnection."""
+        self._reconnect_callbacks.append(cb)
+
+    # ------------------------------------------------------------------
+    # Real-time streaming
+    # ------------------------------------------------------------------
+
+    def subscribe_realtime_bars(
+        self,
+        contract: Contract,
+        what_to_show: str = "TRADES",
+        use_rth: bool = False,
+    ) -> Any:
+        """Subscribe to real-time 5-second bars.
+
+        Returns the ``RealTimeBarList`` whose ``updateEvent`` fires on each
+        new bar.  Set *use_rth* to ``False`` for extended-hours data.
+        """
+        bars = self._ib.reqRealTimeBars(
+            contract, barSize=5, whatToShow=what_to_show, useRTH=use_rth,
+        )
+        log.info(
+            "Subscribed to real-time bars for %s (useRTH=%s)", contract.symbol, use_rth,
+        )
+        return bars
+
+    def cancel_realtime_bars(self, bars: Any) -> None:
+        """Cancel a real-time bars subscription."""
+        self._ib.cancelRealTimeBars(bars)
+        log.info("Cancelled real-time bars subscription")
+
+    async def subscribe_news(self, symbols: list[str]) -> list[Any]:
+        """Subscribe to news by requesting generic tick 292 on stock contracts.
+
+        The ``tickNewsEvent`` on the IB instance fires globally for all
+        news articles related to subscribed contracts.
+
+        Returns the list of tickers (one per symbol).
+        """
+        from marketdata.ibkr.contracts import get_bar_contract
+
+        tickers = []
+        for sym in symbols:
+            contract = get_bar_contract(sym)
+            try:
+                qualified = await self._ib.qualifyContractsAsync(contract)
+                if not qualified:
+                    log.warning("Could not qualify contract for news: %s — skipping", sym)
+                    continue
+                ticker = self._ib.reqMktData(contract, "292", False, False)
+                tickers.append(ticker)
+                log.info("Subscribed to news tick for %s", sym)
+            except Exception as exc:
+                log.warning("Failed to subscribe news for %s: %s", sym, exc)
+        return tickers
+
+    def cancel_news(self, tickers: list[Any]) -> None:
+        """Cancel BroadTape news subscriptions."""
+        for ticker in tickers:
+            self._ib.cancelMktData(ticker.contract)
+        log.info("Cancelled %d news subscriptions", len(tickers))
 
     # ------------------------------------------------------------------
     # Historical bars

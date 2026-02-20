@@ -81,7 +81,7 @@ The Startup shortcut is at:
 ```
 %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\AutoTrade-SPY IB Gateway.lnk
 ```
-Target: `C:\Users\claw\autotrade-data\gateway\start_gateway.bat`
+Target: `C:\Users\claw\auto-trade\autotrade-data\gateway\start_gateway.bat`
 
 Alternatively, if you have admin access, use the Task Scheduler script:
 ```powershell

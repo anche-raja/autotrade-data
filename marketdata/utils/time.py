@@ -60,6 +60,42 @@ def is_within_availability(day: dt.date, bar_size: str, months: int = 6) -> bool
     return day >= cutoff
 
 
+def extended_hours_boundaries(
+    day: dt.date,
+    extended_start: str = "04:00",
+    extended_end: str = "20:00",
+    tz: str = "America/New_York",
+) -> tuple[dt.datetime, dt.datetime]:
+    """Return (start_utc, end_utc) for extended trading hours on a given day."""
+    local_tz = ZoneInfo(tz)
+    sh, sm = (int(x) for x in extended_start.split(":"))
+    eh, em = (int(x) for x in extended_end.split(":"))
+
+    start_local = dt.datetime(day.year, day.month, day.day, sh, sm, tzinfo=local_tz)
+    end_local = dt.datetime(day.year, day.month, day.day, eh, em, tzinfo=local_tz)
+
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)
+
+
+def is_extended_hours_active(
+    extended_start: str = "04:00",
+    extended_end: str = "20:00",
+    tz: str = "America/New_York",
+    exchange: str = "NYSE",
+    now_utc: dt.datetime | None = None,
+) -> bool:
+    """Check whether the current time falls within extended trading hours on a trading day."""
+    now = now_utc or dt.datetime.now(UTC)
+    today = now.astimezone(ZoneInfo(tz)).date()
+
+    trading_days = get_trading_days(today, today, exchange)
+    if not trading_days:
+        return False
+
+    start, end = extended_hours_boundaries(today, extended_start, extended_end, tz)
+    return start <= now <= end
+
+
 def expected_cadence_seconds(bar_size: str) -> int:
     """Return expected seconds between consecutive bars."""
     mapping = {

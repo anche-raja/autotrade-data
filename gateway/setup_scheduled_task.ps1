@@ -8,8 +8,8 @@
 
 $TaskName = "AutoTrade-SPY Daily Fetch"
 $Description = "Fetch daily IBKR market data (1min, 5sec bars + news) after market close"
-$BatchFile = "C:\Users\claw\autotrade-data\gateway\daily_fetch.bat"
-$WorkingDir = "C:\Users\claw\autotrade-data"
+$BatchFile = "C:\Users\claw\auto-trade\autotrade-data\gateway\daily_fetch.bat"
+$WorkingDir = "C:\Users\claw\auto-trade\autotrade-data"
 
 # Remove existing task if present
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue

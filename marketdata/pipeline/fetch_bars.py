@@ -18,7 +18,13 @@ from marketdata.ibkr.client import IBKRClient
 from marketdata.ibkr.contracts import get_bar_contract
 from marketdata.pipeline.chunking import plan_chunks
 from marketdata.pipeline.quality import Gap, validate_partition
-from marketdata.pipeline.storage import _normalize_bar_label, bars_partition_path, write_partition
+from marketdata.pipeline.storage import (
+    _normalize_bar_label,
+    bars_partition_path,
+    merge_partition,
+    read_partition,
+    write_partition,
+)
 from marketdata.utils.log import get_console, get_logger
 from marketdata.utils.time import get_trading_days, is_within_availability, rth_boundaries
 
@@ -200,10 +206,19 @@ async def _fetch_day(
     # Quality: sort, dedup, gap detection
     cleaned, gaps = validate_partition(combined, bar_size, rth_start, rth_end, day)
 
-    # Write Parquet
+    # Write Parquet (merge if streamed data already exists)
     date_str = day.isoformat()
     path = bars_partition_path(cfg.parquet_root, symbol, bar_key, date_str)
-    checksum = write_partition(cleaned, path)
+    existing = read_partition(path)
+    has_streamed = (
+        not existing.empty
+        and "source" in existing.columns
+        and (existing["source"] == "ibkr_stream").any()
+    )
+    if has_streamed:
+        checksum = merge_partition(cleaned, path, prefer_source="ibkr")
+    else:
+        checksum = write_partition(cleaned, path)
 
     # Metadata
     start_ts = cleaned["ts_utc"].min()

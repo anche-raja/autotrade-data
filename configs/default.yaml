@@ -4,7 +4,7 @@
 # e.g. MD_IB_HOST=10.0.0.5  MD_IB_PORT=4001
 
 ib_host: "127.0.0.1"
-ib_port: 7497
+ib_port: 4002
 ib_client_id: 10
 
 data_dir: "data"
@@ -26,3 +26,112 @@ pacing:
 
 # 5-sec bar availability horizon (months back from today)
 five_sec_availability_months: 6
+
+# Real-time streaming service
+streaming:
+  extended_start: "04:00"
+  extended_end: "20:00"
+  flush_interval_sec: 60
+  symbols:
+    - SPY
+    - QQQ
+  bar_sizes:
+    - 5sec
+    - 1min
+  news_symbols:
+    - SPY
+    - QQQ
+    - AAPL
+    - MSFT
+    - NVDA
+    - TSLA
+    - AMZN
+    - META
+    - GOOGL
+  news_providers:
+    - BZ
+    - DJ-N
+    - DJ-RT
+    - FLY
+    - BRFG
+  client_id: 20
+  reconnect_max_attempts: 10
+  reconnect_delay_sec: 10.0
+  reconcile_on_gap: true
+
+# Twitter/X feed collection
+# Auth (pick one):
+#   Option 1 (recommended): Log in to x.com in browser, then
+#     DevTools → Application → Cookies → https://x.com
+#     Copy auth_token and ct0 values below.
+#   Option 2: Set username/password (may be blocked by Cloudflare).
+twitter:
+  accounts:
+    # Tech/Trading/Investing
+    - elonmusk
+    - jimcramer
+    - CathieDWood
+    - naval
+    - paulg
+    - sama
+    - chamath
+    # AI CEOs
+    - satyanadella
+    - DarioAmodei
+    - tim_cook
+    - JensenHuang
+    # Developers / AI researchers
+    - karpathy
+    - ylecun
+    - ID_AA_Carmack
+    - lexfridman
+    - fchollet
+    # Traders, hedge fund CEOs & investors
+    - markminervini
+    - PrestonPysh
+    - TicTocTick
+    - Carl_C_Icahn
+    - BillAckman
+    - PeterSchiff
+    - RayDalio
+    - HowardMarksBook
+    - StevenACohen2
+    - DavidFaber
+    - ScottWapnerCNBC
+    # Tech entrepreneurs
+    - BrianChesky
+    - tobi
+    - patrickc
+    - rabois
+    - jasoncalacanis
+    - DavidSacks
+    - balajis
+    # Economists / macro
+    - NickTimiraos
+    - LHSummers
+    - Nouriel
+    - jasonfurman
+    - paulkrugman
+    # Anthropic
+    - AmandaAskell
+    - jackclarkSF
+    # OpenAI
+    - ilyasut
+    - OfficialLoganK
+    # xAI / misc
+    - BillGates
+  fetch_interval_min: 15
+  tweets_per_account: 20
+  # Option 1: browser cookie import
+  auth_token: "424ecc2d95735507224069a578f8883a7eef9b0e"
+  ct0: "fd9c1c93fbeadacc67d5d873e35e0ce3de1c61f11f766911c515a366b3936145c084770088f52295dccd98d0161383ae48f50b014947a0eec26c54f6ac506fe5f9828bcf3ab4f7d927573216bb897f5c"
+  # Option 2: login credentials
+  username: "anche.raja@gmail.com"
+  password: "?n/v^?YnPt2#,jQ"
+  email: "anche.raja@gmail.com"
+  cookies_file: "data/twitter_cookies.json"
+
+# Notification hooks (future)
+notifications:
+  whatsapp_enabled: false
+  whatsapp_phone: ""

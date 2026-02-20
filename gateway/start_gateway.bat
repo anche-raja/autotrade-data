@@ -13,7 +13,7 @@ REM   e.g. "Build 10.30.1t" -> TWS_MAJOR_VRSN=1030
 REM
 REM For Task Scheduler, use: start_gateway.bat /INLINE
 
-set TWS_MAJOR_VRSN=1044
+set TWS_MAJOR_VRSN=1037
 set IBC_PATH=C:\IBC
 set TWOFA_TIMEOUT_ACTION=restart
 

@@ -61,6 +61,11 @@ def parse_args() -> argparse.Namespace:
         help="Skip waiting for Gateway (use if TWS is running manually)",
     )
     parser.add_argument(
+        "--no-rth",
+        action="store_true",
+        help="Include extended hours (pre-market + after-hours), not just RTH",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         help="Logging level (default: INFO)",
@@ -89,7 +94,12 @@ def wait_for_gateway(host: str, port: int, timeout: int = GATEWAY_WAIT_TIMEOUT) 
 
 
 async def fetch_bars(
-    cfg, symbols: list[str], bar_sizes: list[str], start: dt.date, end: dt.date
+    cfg,
+    symbols: list[str],
+    bar_sizes: list[str],
+    start: dt.date,
+    end: dt.date,
+    rth: bool = True,
 ) -> dict[str, int]:
     from marketdata.db.duck import MetadataDB
     from marketdata.ibkr.client import IBKRClient
@@ -100,7 +110,7 @@ async def fetch_bars(
 
     try:
         await client.connect()
-        return await _fetch(client, db, cfg, symbols, bar_sizes, start, end, rth=True)
+        return await _fetch(client, db, cfg, symbols, bar_sizes, start, end, rth=rth)
     finally:
         await client.disconnect()
         db.close()
@@ -190,8 +200,9 @@ async def main() -> None:
             sys.exit(1)
 
     # Fetch bars with retry
+    use_rth = not args.no_rth
     if not args.news_only:
-        log.info("Fetching bars: symbols=%s sizes=%s", BAR_SYMBOLS, BAR_SIZES)
+        log.info("Fetching bars: symbols=%s sizes=%s rth=%s", BAR_SYMBOLS, BAR_SIZES, use_rth)
         bar_results = await run_with_retry(
             "Bar fetch",
             fetch_bars,
@@ -200,6 +211,7 @@ async def main() -> None:
             bar_sizes=BAR_SIZES,
             start=start,
             end=today,
+            rth=use_rth,
         )
         if bar_results:
             for key, rows in bar_results.items():

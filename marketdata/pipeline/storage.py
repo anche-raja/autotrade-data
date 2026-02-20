@@ -48,6 +48,23 @@ BREADTH_SCHEMA = pa.schema(
     ]
 )
 
+TWEET_SCHEMA = pa.schema(
+    [
+        pa.field("tweet_id", pa.string()),
+        pa.field("created_at", pa.timestamp("us", tz="UTC")),
+        pa.field("account", pa.string()),
+        pa.field("display_name", pa.string()),
+        pa.field("text", pa.string()),
+        pa.field("lang", pa.string()),
+        pa.field("retweet_count", pa.int64()),
+        pa.field("like_count", pa.int64()),
+        pa.field("reply_count", pa.int64()),
+        pa.field("view_count", pa.int64()),
+        pa.field("media_urls", pa.string()),
+        pa.field("source", pa.string()),
+    ]
+)
+
 
 # ------------------------------------------------------------------
 # Path helpers
@@ -75,6 +92,19 @@ def breadth_partition_path(
     date: str,
 ) -> Path:
     return root / f"dataset=breadth/name={name}/date={date}/part.parquet"
+
+
+def tweets_partition_path(
+    root: Path,
+    account: str,
+    date: str,
+) -> Path:
+    """Build Hive-style path for a tweet partition.
+
+    Returns something like:
+        ``root/dataset=tweets/account=elonmusk/date=2026-02-19/part.parquet``
+    """
+    return root / f"dataset=tweets/account={account}/date={date}/part.parquet"
 
 
 def _normalize_bar_label(bar_size: str) -> str:
@@ -115,6 +145,51 @@ def read_partition(path: Path) -> pd.DataFrame:
         return pd.DataFrame()
     table = pq.read_table(str(path))
     return table.to_pandas()
+
+
+def merge_partition(
+    new_df: pd.DataFrame,
+    path: Path,
+    schema: pa.Schema = BAR_SCHEMA,
+    dedup_col: str = "ts_utc",
+    prefer_source: str | None = None,
+) -> str:
+    """Merge new rows into an existing partition (or create it).
+
+    Deduplicates by *dedup_col*, keeping the row from *prefer_source* if
+    specified, otherwise keeping the last occurrence.
+
+    Returns the SHA-256 checksum of the written file.
+    """
+    if path.exists():
+        try:
+            existing = read_partition(path)
+        except Exception:
+            # Corrupted file — overwrite with new data
+            existing = pd.DataFrame()
+        if existing.empty:
+            combined = new_df.copy()
+        else:
+            combined = pd.concat([existing, new_df], ignore_index=True)
+
+        if prefer_source and "source" in combined.columns:
+            # Sort so preferred source comes last (keep='last' in dedup)
+            source_order = combined["source"].apply(
+                lambda s, ps=prefer_source: 0 if s != ps else 1
+            )
+            combined = combined.assign(_sort_order=source_order)
+            combined = combined.sort_values([dedup_col, "_sort_order"])
+            combined = combined.drop_duplicates(subset=[dedup_col], keep="last")
+            combined = combined.drop(columns=["_sort_order"])
+        else:
+            combined = combined.sort_values(dedup_col)
+            combined = combined.drop_duplicates(subset=[dedup_col], keep="last")
+
+        combined = combined.sort_values(dedup_col).reset_index(drop=True)
+    else:
+        combined = new_df.sort_values(dedup_col).reset_index(drop=True)
+
+    return write_partition(combined, path, schema)
 
 
 def _file_sha256(path: Path) -> str:

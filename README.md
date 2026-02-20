@@ -73,7 +73,7 @@ data/parquet/
 The companion repo [autotrade-spy](../autotrade-spy) reads this data for analysis, backtesting, and the web UI. Point it here via:
 
 ```
-PARQUET_ROOT=C:\Users\claw\autotrade-data\data\parquet
+PARQUET_ROOT=C:\Users\claw\auto-trade\autotrade-data\data\parquet
 ```
 
 ## IB Gateway Setup

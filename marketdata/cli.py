@@ -251,6 +251,87 @@ def fetch_news(
 
 
 # ------------------------------------------------------------------
+# stream
+# ------------------------------------------------------------------
+
+
+@app.command()
+def stream(
+    symbols: str = typer.Option("", help="Comma-separated bar symbols (empty=use config)"),
+    log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
+) -> None:
+    """Start the real-time streaming service (bars + news)."""
+    import signal as _signal
+
+    setup_logging(log_level)
+    log = get_logger(__name__)
+    cfg = load_config()
+
+    if symbols:
+        cfg.streaming.symbols = [s.strip().upper() for s in symbols.split(",")]
+
+    log.info(
+        "Starting streaming service: bars=%s news=%s",
+        cfg.streaming.symbols,
+        cfg.streaming.news_symbols,
+    )
+
+    from marketdata.streaming.service import StreamingService
+
+    service = StreamingService(cfg)
+    _signal.signal(_signal.SIGINT, lambda *_: service.request_shutdown())
+    _signal.signal(_signal.SIGTERM, lambda *_: service.request_shutdown())
+
+    asyncio.run(service.run_forever())
+
+
+# ------------------------------------------------------------------
+# tweets
+# ------------------------------------------------------------------
+
+
+@app.command()
+def tweets(
+    accounts: str = typer.Option("", help="Comma-separated accounts (empty=use config)"),
+    once: bool = typer.Option(False, "--once", help="Run once and exit instead of looping"),
+    log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
+) -> None:
+    """Collect tweets from configured Twitter/X accounts."""
+    import signal as _signal
+
+    setup_logging(log_level)
+    log = get_logger(__name__)
+    cfg = load_config()
+
+    if accounts:
+        cfg.twitter.accounts = [a.strip() for a in accounts.split(",")]
+
+    log.info("Starting tweet collection: accounts=%s", cfg.twitter.accounts)
+
+    from marketdata.twitter.collector import TweetCollector
+
+    collector = TweetCollector(cfg)
+    _signal.signal(_signal.SIGINT, lambda *_: setattr(collector, "_running", False))
+    _signal.signal(_signal.SIGTERM, lambda *_: setattr(collector, "_running", False))
+
+    async def _run() -> int:
+        await collector.start()
+        try:
+            if once:
+                return await collector.collect_all()
+            else:
+                await collector.run_forever()
+                return 0
+        finally:
+            await collector.stop()
+
+    result = asyncio.run(_run())
+    if once:
+        console = get_console()
+        console.print(f"\n[bold green]Tweet collection complete![/bold green] {result} new tweets.")
+
+
+# ------------------------------------------------------------------
 # validate
 # ------------------------------------------------------------------
 
