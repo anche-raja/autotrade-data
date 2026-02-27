@@ -11,7 +11,8 @@ docker-compose up -d
     ├── ib-gateway        IB Gateway (paper trading, port 4002)
     ├── streaming         Real-time 5sec bars + news (4 AM - 8 PM ET)
     ├── twitter           Tweet collection every 15 min
-    └── daily-fetch       Cron: bars + news at 5 PM ET weekdays
+    ├── daily-fetch       Cron: bars + news at 5 PM ET weekdays
+    └── s3-sync           Syncs parquet data to S3 every 5 min
 ```
 
 Docker Desktop auto-starts on Windows login. All containers have `restart: unless-stopped`, so they come back after reboots automatically.
@@ -74,6 +75,7 @@ docker-compose logs daily-fetch --tail 5
 | `streaming` | Custom (`Dockerfile`) | Real-time bars + news during market hours | Gateway healthy |
 | `twitter` | Custom (`Dockerfile`) | Tweet collection from 40+ accounts | — |
 | `daily-fetch` | Custom (`Dockerfile`) | Cron job: fetch bars + news after market close | Gateway healthy |
+| `s3-sync` | `amazon/aws-cli:latest` | Syncs parquet data to S3 every 5 min | — |
 
 ### Networking
 
@@ -93,8 +95,8 @@ uv run marketdata fetch-bars --symbols SPY --bar-sizes 1min --start 2025-01-01 -
 
 | File | Purpose |
 |------|---------|
-| `docker-compose.yml` | All 4 services: gateway, streaming, twitter, daily-fetch |
-| `.env.docker` | IBKR credentials for gateway container |
+| `docker-compose.yml` | All 5 services: gateway, streaming, twitter, daily-fetch, s3-sync |
+| `.env.docker` | IBKR credentials + AWS keys for gateway and s3-sync |
 | `crontab` | Supercronic schedule for daily fetch (5 PM ET weekdays) |
 | `../Dockerfile` | Service image: Python 3.12 + uv + supercronic + project deps |
 | `daily_fetch.py` | Fetch script: bars (1min, 5sec) + news with retry and gateway polling |
@@ -113,6 +115,36 @@ uv run marketdata fetch-bars --symbols SPY --bar-sizes 1min --start 2025-01-01 -
 | `setup_streaming_task.ps1` | Streaming Task Scheduler setup |
 | `setup_twitter_task.ps1` | Twitter Task Scheduler setup |
 | `gateway_manager.ps1` | PowerShell gateway manager |
+
+## S3 Sync
+
+The `s3-sync` service copies parquet data to AWS S3 every 5 minutes using `aws s3 sync`. The cloud-hosted web dashboard reads data from S3 instead of local disk.
+
+### Setup
+
+1. Create an S3 bucket (e.g. `autotrade-data`) in `us-east-1`
+2. Enable versioning on the bucket (data safety)
+3. Create an IAM user with `s3:PutObject`, `s3:GetObject`, `s3:ListBucket` permissions
+4. Add credentials to `.env.docker`:
+   ```
+   AWS_ACCESS_KEY_ID=your_key
+   AWS_SECRET_ACCESS_KEY=your_secret
+   AWS_REGION=us-east-1
+   S3_BUCKET=autotrade-data
+   ```
+5. Rebuild: `docker-compose up -d --build`
+
+### How it works
+
+- Uses `--size-only` to skip unchanged files (fast delta sync)
+- Uses `--storage-class INTELLIGENT_TIERING` for automatic cost optimization
+- Excludes `*.duckdb` and `*.sqlite` (local-only metadata)
+- **Never deletes** from S3 (no `--delete` flag) — safe against local data loss
+- Read-only mount (`:ro`) — container cannot modify local data
+
+### Disable S3 sync
+
+If you don't need S3, leave `AWS_ACCESS_KEY_ID` empty in `.env.docker`. The service will start but fail silently and retry every 5 minutes. Or remove the `s3-sync` service from `docker-compose.yml`.
 
 ## Daily Fetch
 

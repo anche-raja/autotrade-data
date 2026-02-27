@@ -45,11 +45,12 @@ docker-compose ps
 docker-compose logs -f
 ```
 
-This starts 4 containers:
+This starts 5 containers:
 - **ib-gateway** — IB Gateway (paper trading, port 4002)
 - **streaming** — Real-time 5sec bars + news (4 AM - 8 PM ET)
 - **twitter** — Tweet collection every 15 min
 - **daily-fetch** — Cron: bars + news at 5 PM ET weekdays
+- **s3-sync** — Syncs parquet data to S3 every 5 min (requires AWS credentials in `.env.docker`)
 
 See [gateway/README.md](gateway/README.md) for full setup guide.
 
