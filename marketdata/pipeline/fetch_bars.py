@@ -8,6 +8,7 @@ Parquet partitions, and records metadata in DuckDB.
 from __future__ import annotations
 
 import datetime as dt
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
@@ -19,14 +20,17 @@ from marketdata.ibkr.contracts import get_bar_contract
 from marketdata.pipeline.chunking import plan_chunks
 from marketdata.pipeline.quality import Gap, validate_partition
 from marketdata.pipeline.storage import (
-    _normalize_bar_label,
     bars_partition_path,
     merge_partition,
+    normalize_bar_label,
     read_partition,
     write_partition,
 )
 from marketdata.utils.log import get_console, get_logger
 from marketdata.utils.time import get_trading_days, is_within_availability, rth_boundaries
+
+if TYPE_CHECKING:
+    from ib_async import Contract
 
 log = get_logger(__name__)
 
@@ -53,7 +57,7 @@ async def fetch_bars(
         contract = get_bar_contract(symbol)
 
         for bar_size in bar_sizes:
-            bar_key = _normalize_bar_label(bar_size)
+            bar_key = normalize_bar_label(bar_size)
             result_key = f"{symbol}_{bar_key}"
             results[result_key] = 0
 
@@ -113,7 +117,7 @@ async def _fetch_day(
     client: IBKRClient,
     db: MetadataDB,
     cfg: PipelineConfig,
-    contract,
+    contract: Contract,
     symbol: str,
     bar_key: str,
     bar_size: str,

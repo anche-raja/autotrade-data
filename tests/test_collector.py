@@ -2,49 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pytest
 
-from marketdata.config import PipelineConfig, StreamingConfig
 from marketdata.streaming.collector import StreamingCollector
 
 UTC = ZoneInfo("UTC")
 
 
-def _make_cfg(tmp_path: Path) -> PipelineConfig:
-    """Create a minimal PipelineConfig pointing at a temp dir."""
-    return PipelineConfig(
-        data_dir=str(tmp_path),
-        streaming=StreamingConfig(
-            symbols=["SPY"],
-            bar_sizes=["5sec", "1min"],
-            flush_interval_sec=1,
-        ),
-    )
-
-
-def _mock_client() -> MagicMock:
-    """Create a mock IBKRClient with the methods StreamingCollector needs."""
-    client = MagicMock()
-    client.subscribe_realtime_bars = MagicMock(return_value=MagicMock(updateEvent=MagicMock()))
-    client.cancel_realtime_bars = MagicMock()
-    client.register_reconnect_callback = MagicMock()
-    client.ib = MagicMock()
-    client.ib.disconnectedEvent = MagicMock()
-    return client
-
-
 class TestStreamingCollector:
-    def test_on_bar_buffers_5sec(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    def test_on_bar_buffers_5sec(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
         collector._running = True
 
         base = dt.datetime(2025, 6, 15, 14, 0, 0, tzinfo=UTC)
@@ -71,10 +44,9 @@ class TestStreamingCollector:
         assert bar["close"] == 500.5
         assert bar["source"] == "ibkr_stream"
 
-    def test_on_bar_skips_when_not_running(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    def test_on_bar_skips_when_not_running(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
         collector._running = False
 
         mock_bars = MagicMock()
@@ -82,10 +54,9 @@ class TestStreamingCollector:
 
         assert len(collector._buffers["SPY"]["5sec"]) == 0
 
-    def test_on_bar_skips_when_no_new_bar(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    def test_on_bar_skips_when_no_new_bar(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
         collector._running = True
 
         mock_bars = MagicMock()
@@ -93,10 +64,9 @@ class TestStreamingCollector:
 
         assert len(collector._buffers["SPY"]["5sec"]) == 0
 
-    def test_on_bar_aggregates_1min(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    def test_on_bar_aggregates_1min(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
         collector._running = True
 
         base = dt.datetime(2025, 6, 15, 14, 0, 0, tzinfo=UTC)
@@ -141,10 +111,9 @@ class TestStreamingCollector:
         assert agg["volume"] == 1200.0
 
     @pytest.mark.asyncio
-    async def test_flush_all_writes_parquet(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    async def test_flush_all_writes_parquet(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
 
         base = dt.datetime(2025, 6, 15, 14, 0, 0, tzinfo=UTC)
         bar = {
@@ -167,7 +136,9 @@ class TestStreamingCollector:
         assert len(collector._buffers["SPY"]["5sec"]) == 0
 
         # Parquet file should exist
-        parquet_dir = tmp_path / "parquet" / "dataset=bars" / "symbol=SPY" / "bar=5sec" / "date=2025-06-15"
+        parquet_dir = (
+            cfg.parquet_root / "dataset=bars" / "symbol=SPY" / "bar=5sec" / "date=2025-06-15"
+        )
         assert parquet_dir.exists()
         files = list(parquet_dir.glob("*.parquet"))
         assert len(files) == 1
@@ -176,10 +147,9 @@ class TestStreamingCollector:
         assert len(df) == 1
         assert df.iloc[0]["open"] == 500.0
 
-    def test_gap_tracking(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    def test_gap_tracking(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
 
         assert collector.gaps == []
 
@@ -191,10 +161,9 @@ class TestStreamingCollector:
         assert collector.gaps == []
 
     @pytest.mark.asyncio
-    async def test_resubscribe_records_gap(self, tmp_path):
-        cfg = _make_cfg(tmp_path)
-        client = _mock_client()
-        collector = StreamingCollector(client, cfg)
+    async def test_resubscribe_records_gap(self, make_pipeline_cfg, mock_ibkr_client) -> None:
+        cfg = make_pipeline_cfg()
+        collector = StreamingCollector(mock_ibkr_client, cfg)
         collector._subscriptions["SPY"] = MagicMock()
 
         # Simulate disconnect

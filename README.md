@@ -11,29 +11,55 @@ autotrade-data/
 │   ├── config.py                  # PipelineConfig (YAML + env vars)
 │   ├── ibkr/                      # Client, contracts, pacing
 │   ├── pipeline/                  # Fetch, chunk, store, quality, news, breadth
+│   ├── streaming/                 # Real-time bar/news collection
+│   ├── twitter/                   # Twitter/X feed collector
 │   ├── db/                        # DuckDB metadata tracking
 │   └── utils/                     # Trading calendar, logging
 │
-├── gateway/                       # IB Gateway automation (IBC)
-│   ├── daily_fetch.py             # Daily data fetch (bars + news)
-│   ├── start_gateway.bat          # IBC gateway launcher
+├── gateway/                       # Docker-based IB Gateway + services
+│   ├── docker-compose.yml         # IB Gateway + streaming + twitter + daily-fetch
+│   ├── .env.docker                # IBKR credentials (gitignored)
+│   ├── crontab                    # Daily fetch schedule (5 PM ET weekdays)
 │   └── README.md                  # Full setup guide
 │
+├── Dockerfile                     # Service image (Python 3.12 + uv + supercronic)
 ├── configs/
 │   └── default.yaml               # IBKR connection, pacing, RTH settings
 │
 ├── tests/                         # pytest suite
 └── data/                          # Runtime output (gitignored)
-    └── parquet/                   # Hive-partitioned: bars, news, breadth
+    └── parquet/                   # Hive-partitioned: bars, news, breadth, tweets
 ```
 
-## Quick Start
+## Quick Start (Docker)
+
+```bash
+# 1. Configure IBKR credentials
+edit gateway/.env.docker
+
+# 2. Start everything (IB Gateway + all services)
+cd gateway && docker-compose up -d --build
+
+# 3. Verify
+docker-compose ps
+docker-compose logs -f
+```
+
+This starts 4 containers:
+- **ib-gateway** — IB Gateway (paper trading, port 4002)
+- **streaming** — Real-time 5sec bars + news (4 AM - 8 PM ET)
+- **twitter** — Tweet collection every 15 min
+- **daily-fetch** — Cron: bars + news at 5 PM ET weekdays
+
+See [gateway/README.md](gateway/README.md) for full setup guide.
+
+## Manual CLI Usage
 
 ```bash
 # Install dependencies
 uv sync
 
-# Fetch bars (requires IB Gateway/TWS running)
+# Fetch bars (requires IB Gateway running — Docker or local)
 uv run marketdata fetch-bars --symbols SPY,QQQ --bar-sizes 1min --start 2024-01-01 --end 2024-12-31 --rth
 
 # Fetch news
@@ -41,9 +67,6 @@ uv run marketdata fetch-news --symbols SPY,QQQ --providers BZ+DJ-N+DJ-RT+FLY+BRF
 
 # Validate data coverage
 uv run marketdata validate --symbols SPY,QQQ --bar-sizes 1min
-
-# Daily automated fetch (via Task Scheduler)
-uv run python gateway/daily_fetch.py --days 3
 
 # Run tests
 uv run pytest
@@ -55,7 +78,7 @@ Edit `configs/default.yaml` or use `MD_` env vars:
 
 ```yaml
 ib_host: "127.0.0.1"
-ib_port: 7497          # paper: 7497, live: 7496
+ib_port: 4002          # Docker: 4002, local paper: 7497, local live: 7496
 ib_client_id: 10
 data_dir: "data"
 rth_only: true
@@ -66,16 +89,14 @@ rth_only: true
 ```
 data/parquet/
 ├── dataset=bars/symbol=SPY/bar=1min/date=YYYY-MM-DD/part.parquet
+├── dataset=bars/symbol=SPY/bar=5sec/date=YYYY-MM-DD/part.parquet
 ├── dataset=news/symbol=spy/date=YYYY-MM-DD/part.parquet
-└── dataset=breadth/name=nyse_adv/date=YYYY-MM-DD/part.parquet
+├── dataset=breadth/name=nyse_adv/date=YYYY-MM-DD/part.parquet
+└── dataset=tweets/account=elonmusk/date=YYYY-MM-DD/part.parquet
 ```
 
 The companion repo [autotrade-spy](../autotrade-spy) reads this data for analysis, backtesting, and the web UI. Point it here via:
 
 ```
-PARQUET_ROOT=C:\Users\claw\auto-trade\autotrade-data\data\parquet
+PARQUET_ROOT=../autotrade-data/data/parquet
 ```
-
-## IB Gateway Setup
-
-See [gateway/README.md](gateway/README.md) for full IBC setup, scheduled tasks, and troubleshooting.

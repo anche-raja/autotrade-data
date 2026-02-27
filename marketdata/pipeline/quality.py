@@ -29,7 +29,17 @@ class Gap:
 def clean_bars(df: pd.DataFrame, bar_size: str) -> pd.DataFrame:
     """Sort by ts_utc, de-duplicate (keep last), ensure monotonic.
 
-    Returns a new DataFrame.
+    Parameters
+    ----------
+    df : DataFrame
+        Raw bar data with a ``ts_utc`` column.
+    bar_size : str
+        Canonical bar size (reserved for future per-size cleaning rules).
+
+    Returns
+    -------
+    DataFrame
+        Cleaned copy with ``quality_flags`` set to ``"ok"`` or ``"deduped"``.
     """
     if df.empty:
         return df.copy()

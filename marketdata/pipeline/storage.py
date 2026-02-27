@@ -82,7 +82,7 @@ def bars_partition_path(
     Returns something like:
         ``root/dataset=bars/symbol=SPY/bar=1min/date=2025-06-15/part.parquet``
     """
-    bar_label = _normalize_bar_label(bar_size)
+    bar_label = normalize_bar_label(bar_size)
     return root / f"dataset=bars/symbol={symbol}/bar={bar_label}/date={date}/part.parquet"
 
 
@@ -91,6 +91,7 @@ def breadth_partition_path(
     name: str,
     date: str,
 ) -> Path:
+    """Build Hive-style path for a breadth partition."""
     return root / f"dataset=breadth/name={name}/date={date}/part.parquet"
 
 
@@ -107,7 +108,11 @@ def tweets_partition_path(
     return root / f"dataset=tweets/account={account}/date={date}/part.parquet"
 
 
-def _normalize_bar_label(bar_size: str) -> str:
+def normalize_bar_label(bar_size: str) -> str:
+    """Normalize IBKR bar size strings to canonical partition labels.
+
+    Maps variations like ``"1 min"`` and ``"5 secs"`` to ``"1min"`` and ``"5sec"``.
+    """
     mapping = {"1 min": "1min", "1min": "1min", "5 secs": "5sec", "5sec": "5sec", "5s": "5sec"}
     return mapping.get(bar_size, bar_size)
 
@@ -165,7 +170,7 @@ def merge_partition(
         try:
             existing = read_partition(path)
         except Exception:
-            # Corrupted file — overwrite with new data
+            log.warning("Corrupt partition at %s — overwriting with new data", path, exc_info=True)
             existing = pd.DataFrame()
         if existing.empty:
             combined = new_df.copy()
@@ -193,6 +198,7 @@ def merge_partition(
 
 
 def _file_sha256(path: Path) -> str:
+    """Compute SHA-256 hex digest of a file."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 16), b""):

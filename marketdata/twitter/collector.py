@@ -136,6 +136,11 @@ class TweetCollector:
             p = _PROJECT_ROOT / raw
         return p
 
+    def request_shutdown(self) -> None:
+        """Signal the collector to shut down gracefully."""
+        self._running = False
+        log.info("TweetCollector shutdown requested")
+
     async def stop(self) -> None:
         """Stop the collector."""
         self._running = False

@@ -1,130 +1,120 @@
 # Gateway
 
-IB Gateway management and daily data collection for AutoTrade-SPY.
+IB Gateway management and automated data collection for AutoTrade.
 
 ## Overview
 
-Two automated systems work together to keep data flowing without manual intervention:
-
-1. **IB Gateway (via IBC)** — Starts IB Gateway at login, handles authentication, auto-restarts on crashes
-2. **Daily Data Fetch** — Runs at 5 PM ET after market close, pulls bars and news
+Everything runs via **Docker Compose** — no local IB Gateway install or Windows scheduled tasks needed.
 
 ```
-System Boot / Login
-    └─► IB Gateway starts via IBC (Startup folder)
-            └─► Gateway accepts API connections on port 7497
-
-5:00 PM ET (Task Scheduler)
-    └─► daily_fetch.bat
-            └─► Waits for Gateway connectivity
-            └─► Fetches 1min + 5sec bars (SPY, QQQ)
-            └─► Fetches news (SPY, QQQ, AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL)
-            └─► Logs to data/logs/daily_fetch.log
+docker-compose up -d
+    ├── ib-gateway        IB Gateway (paper trading, port 4002)
+    ├── streaming         Real-time 5sec bars + news (4 AM - 8 PM ET)
+    ├── twitter           Tweet collection every 15 min
+    └── daily-fetch       Cron: bars + news at 5 PM ET weekdays
 ```
+
+Docker Desktop auto-starts on Windows login. All containers have `restart: unless-stopped`, so they come back after reboots automatically.
 
 ## Prerequisites
 
-| Component | Location | Source |
-|-----------|----------|--------|
-| IB Gateway | `C:\Jts` | [IBKR Downloads](https://www.interactivebrokers.com/en/trading/tws-updateable-latest.php) |
-| IBC v3.23+ | `C:\IBC` | [IBC Releases](https://github.com/IbcAlpha/IBC/releases/latest) |
-| IBC Config | `%USERPROFILE%\Documents\IBC\config.ini` | Copy from `gateway/ibc_config.ini` |
-| Python + uv | On PATH | [uv](https://docs.astral.sh/uv/) |
+| Component | Notes |
+|-----------|-------|
+| Docker Desktop | [Install](https://www.docker.com/products/docker-desktop/) — set to start on login |
+| IBKR account | Paper or live trading account |
+| Python + uv | Only needed for manual CLI usage outside Docker |
 
 ## Setup
 
-### 1. Install IB Gateway
+### 1. Configure credentials
 
-Download and install IB Gateway from IBKR. Default install location is `C:\Jts`.
+Edit `gateway/.env.docker` with your IBKR credentials:
 
-### 2. Install IBC
-
-1. Download the latest IBC release ZIP from [GitHub](https://github.com/IbcAlpha/IBC/releases/latest)
-2. Right-click the ZIP > Properties > check "Unblock" > Apply
-3. Extract to `C:\IBC`
-
-### 3. Configure IBC
-
-Copy the template config and fill in your IBKR credentials:
-
-```powershell
-mkdir "$env:USERPROFILE\Documents\IBC" -Force
-copy gateway\ibc_config.ini "$env:USERPROFILE\Documents\IBC\config.ini"
+```env
+TWS_USERID=your_username
+TWS_PASSWORD=your_password
+TRADING_MODE=paper
+READ_ONLY_API=yes
+VNC_SERVER_PASSWORD=autotrade
+TWOFA_TIMEOUT_ACTION=restart
+TIME_ZONE=America/New_York
 ```
 
-Edit `%USERPROFILE%\Documents\IBC\config.ini`:
+### 2. Start everything
 
-```ini
-IbLoginId=your_username
-IbPassword=your_password
-TradingMode=paper          # or "live"
-OverrideTwsApiPort=7497    # paper: 7497, live: 7496
+```bash
+cd autotrade-data/gateway
+docker-compose up -d --build
 ```
 
-> **Important**: The real `config.ini` with credentials lives outside the repo and is never committed to git. Only the template (`gateway/ibc_config.ini`) is tracked.
+The first run pulls the IB Gateway image (~400MB) and builds the service image (~200MB). Subsequent starts are fast.
 
-### 4. Update Gateway Version
+### 3. Verify
 
-Check your installed IB Gateway version: run Gateway manually > Help > About IB Gateway.
-For example, "Build 10.44.1t" means version **1044**.
+```bash
+# Check all containers are running
+docker-compose ps
 
-Update the version in two places:
+# Check gateway is healthy
+docker-compose logs ib-gateway --tail 10
 
-- `gateway/start_gateway.bat` — line `set TWS_MAJOR_VRSN=1044`
-- `C:\IBC\StartGateway.bat` — line `set TWS_MAJOR_VRSN=1044`
-
-### 5. Register Scheduled Tasks
-
-**IB Gateway auto-start** — uses a Windows Startup shortcut (no admin required):
-
-The Startup shortcut is at:
-```
-%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\AutoTrade-SPY IB Gateway.lnk
-```
-Target: `C:\Users\claw\auto-trade\autotrade-data\gateway\start_gateway.bat`
-
-Alternatively, if you have admin access, use the Task Scheduler script:
-```powershell
-powershell -ExecutionPolicy Bypass -File gateway\setup_ibc_task.ps1
+# Check services
+docker-compose logs streaming --tail 10
+docker-compose logs twitter --tail 10
+docker-compose logs daily-fetch --tail 5
 ```
 
-**Daily data fetch** — runs at 5 PM ET via Task Scheduler:
+## Architecture
 
-```powershell
-powershell -ExecutionPolicy Bypass -File gateway\setup_scheduled_task.ps1
+### Docker Compose Services
+
+| Service | Image | Purpose | Depends On |
+|---------|-------|---------|------------|
+| `ib-gateway` | `ghcr.io/gnzsnz/ib-gateway:stable` | IB Gateway with auto-login via IBC | — |
+| `streaming` | Custom (`Dockerfile`) | Real-time bars + news during market hours | Gateway healthy |
+| `twitter` | Custom (`Dockerfile`) | Tweet collection from 40+ accounts | — |
+| `daily-fetch` | Custom (`Dockerfile`) | Cron job: fetch bars + news after market close | Gateway healthy |
+
+### Networking
+
+Services connect to the gateway via Docker's internal network (`ib-gateway:4002`). The gateway also exposes port 4002 to the host for manual CLI usage:
+
+```bash
+# Manual CLI fetch (from host, uses localhost:4002)
+uv run marketdata fetch-bars --symbols SPY --bar-sizes 1min --start 2025-01-01 --end 2025-03-01 --rth
 ```
+
+### Data Persistence
+
+- **Parquet data**: Bind-mounted from `../data` so autotrade-spy can read it
+- **Gateway settings**: Docker named volume `ib-gateway-settings` persists between restarts
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `start_gateway.bat` | Launches IB Gateway through IBC. Sets version, calls `C:\IBC\StartGateway.bat` |
-| `daily_fetch.py` | Main fetch script: bars (1min, 5sec) + news with retry and gateway polling |
-| `daily_fetch.bat` | Batch wrapper for Task Scheduler, calls `daily_fetch.py` with 3-day lookback |
-| `ibc_config.ini` | Template IBC config — copy to `%USERPROFILE%\Documents\IBC\config.ini` |
-| `setup_scheduled_task.ps1` | Creates Task Scheduler entry for daily fetch at 5 PM ET |
-| `setup_ibc_task.ps1` | Creates Task Scheduler entry for Gateway at logon (requires admin) |
+| `docker-compose.yml` | All 4 services: gateway, streaming, twitter, daily-fetch |
+| `.env.docker` | IBKR credentials for gateway container |
+| `crontab` | Supercronic schedule for daily fetch (5 PM ET weekdays) |
+| `../Dockerfile` | Service image: Python 3.12 + uv + supercronic + project deps |
+| `daily_fetch.py` | Fetch script: bars (1min, 5sec) + news with retry and gateway polling |
+| `streaming_service.py` | Real-time bar/news streamer (4 AM - 8 PM ET) |
+| `twitter_service.py` | Tweet collector (15-min intervals) |
+| `gateway_manager.py` | Gateway lifecycle tool (status, start, stop) |
 
-## Daily Fetch Script
+### Legacy files (Windows IBC setup, no longer used)
 
-### Usage
+| File | Purpose |
+|------|---------|
+| `start_gateway.bat` | IBC gateway launcher (Windows) |
+| `ibc_config.ini` | Template IBC config |
+| `setup_scheduled_task.ps1` | Daily fetch Task Scheduler setup |
+| `setup_ibc_task.ps1` | Gateway Task Scheduler setup |
+| `setup_streaming_task.ps1` | Streaming Task Scheduler setup |
+| `setup_twitter_task.ps1` | Twitter Task Scheduler setup |
+| `gateway_manager.ps1` | PowerShell gateway manager |
 
-```bash
-# Default: fetch last 3 days of bars + news
-uv run python gateway/daily_fetch.py
-
-# Custom lookback
-uv run python gateway/daily_fetch.py --days 7
-
-# Bars only (skip news)
-uv run python gateway/daily_fetch.py --bars-only
-
-# News only (skip bars)
-uv run python gateway/daily_fetch.py --news-only
-
-# Skip Gateway connectivity check (if TWS is running manually)
-uv run python gateway/daily_fetch.py --skip-gateway-check
-```
+## Daily Fetch
 
 ### What it fetches
 
@@ -132,80 +122,85 @@ uv run python gateway/daily_fetch.py --skip-gateway-check
 |-----------|---------|---------|
 | 1min bars | SPY, QQQ | RTH only (09:30-16:00 ET) |
 | 5sec bars | SPY, QQQ | RTH only, ~6 months history available |
-| News | SPY, QQQ, AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL | Headlines + bodies, providers: BZ, DJ-N, DJ-RT, FLY, BRFG, BRFUPDN |
+| News | SPY, QQQ, AAPL, MSFT, NVDA, TSLA, AMZN, META, GOOGL | Headlines + bodies, providers: BZ, DJ-N, DJ-RT, FLY, BRFG |
 
 ### Resilience
 
-- **Gateway polling**: Waits up to 5 minutes for IB Gateway to accept connections before starting
-- **Phase retry**: Retries the entire bars or news phase up to 2 times with 30s backoff
+- **Gateway health check**: Docker waits for port 4002 before starting dependent services
+- **Phase retry**: Retries the bars or news phase up to 2 times with 30s backoff
 - **Client auto-reconnect**: `IBKRClient` detects dropped connections and reconnects (3 attempts, 5s delay)
 - **Idempotent**: Pipeline skips already-ingested days via DuckDB metadata tracking
 - **3-day lookback**: Default catches gaps from missed runs or weekends
 
-### Logs
+### Manual run
 
-- Console: stdout during manual runs
-- File: `data/logs/daily_fetch.log` (appended each run)
-- Errors: `data/logs/daily_fetch_errors.log` (batch wrapper, exit code only)
+```bash
+# Run fetch manually inside the container
+docker-compose exec daily-fetch .venv/bin/python gateway/daily_fetch.py --days 7
 
-## Client Auto-Reconnect
+# Or from host (requires uv and IB Gateway port exposed)
+uv run python gateway/daily_fetch.py --days 3
+```
 
-The `IBKRClient` in `marketdata/ibkr/client.py` handles dropped connections:
+## Common Operations
 
-- Registers a `disconnectedEvent` handler to log disconnections
-- `_ensure_connected()` checks connection state before every API call
-- On disconnect: retries up to 3 times with 5-second delays
-- Raises `ConnectionError` if all reconnect attempts fail
+```bash
+# Start all services
+docker-compose up -d
 
-## IBC Configuration Reference
+# Stop all services
+docker-compose down
 
-Key settings in `%USERPROFILE%\Documents\IBC\config.ini`:
+# Restart just the gateway
+docker-compose restart ib-gateway
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `TradingMode` | `paper` / `live` | Which account to log into |
-| `OverrideTwsApiPort` | `7497` (paper) / `7496` (live) | API socket port, must match `configs/default.yaml` |
-| `ReadOnlyApi` | `yes` | Safe for data-only fetching |
-| `AcceptIncomingConnectionAction` | `accept` | Allow API connections without manual approval |
-| `ExistingSessionDetectedAction` | `primaryoverride` | Take over if logged in elsewhere (e.g., mobile) |
-| `ReloginAfterSecondFactorAuthenticationTimeout` | `yes` | Auto-retry login after 2FA timeout |
-| `SecondFactorAuthenticationExitInterval` | `180` | Seconds to wait for 2FA approval |
-| `AcceptNonBrokerageAccountWarning` | `yes` | Auto-dismiss paper trading dialog |
+# Rebuild after code changes
+docker-compose up -d --build
+
+# View live logs
+docker-compose logs -f
+
+# View specific service logs
+docker-compose logs streaming --tail 50
+
+# Check gateway health
+docker inspect --format='{{.State.Health.Status}}' ib-gateway
+```
 
 ## Weekly Operation
 
 | Day | What Happens |
 |-----|-------------|
-| **Sunday ~1 AM ET** | IB expires weekly session. Gateway stops. IBC restarts it. Approve 2FA on IBKR Mobile app once. |
-| **Mon-Fri** | Gateway auto-restarts daily (no 2FA). Daily fetch runs at 5 PM ET. |
-| **Weekends** | Gateway stays connected. No market data to fetch (markets closed). |
+| **Sunday ~1 AM ET** | IB expires weekly session. Gateway container restarts. Approve 2FA on IBKR Mobile app once. |
+| **Mon-Fri** | Gateway auto-restarts daily (no 2FA). Daily fetch runs at 5 PM ET. Streaming runs 4 AM - 8 PM ET. |
+| **Weekends** | Gateway stays connected. No market data to fetch (markets closed). Twitter collection continues. |
 
 > **Note**: You only need to manually approve 2FA once per week (Sunday night). All other restarts are handled automatically.
 
 ## Troubleshooting
 
-### Gateway won't start
-- Check IBC logs: `C:\IBC\Logs\`
-- Verify `TWS_MAJOR_VRSN` matches installed version in both `gateway/start_gateway.bat` and `C:\IBC\StartGateway.bat`
-- Run `gateway/start_gateway.bat` manually from a command prompt to see errors
+### Gateway won't authenticate
+- Check credentials in `.env.docker`
+- View gateway logs: `docker-compose logs ib-gateway --tail 30`
+- Connect via VNC (`localhost:5900`, password: `autotrade`) to see the Gateway UI
 
-### Daily fetch fails
-- Check `data/logs/daily_fetch.log` for details
-- Verify Gateway is running: `netstat -an | findstr 7497`
-- Test manually: `uv run python gateway/daily_fetch.py --days 1`
+### Services won't start (waiting for gateway)
+- Services with `depends_on: service_healthy` wait for gateway health check
+- Health check has 180s start period — give it time after first boot
+- Check: `docker inspect --format='{{.State.Health.Status}}' ib-gateway`
 
-### 2FA not working
-- Ensure IBKR Mobile app is installed and notifications are enabled
-- Check `SecondFactorAuthenticationExitInterval` is long enough (default 180s)
-- IBC will retry automatically if `ReloginAfterSecondFactorAuthenticationTimeout=yes`
+### Streaming connects but disconnects
+- Check if market is open (4 AM - 8 PM ET)
+- View logs: `docker-compose logs streaming --tail 30`
+- Streaming auto-reconnects (up to 10 attempts with 10s delay)
 
-### Task Scheduler issues
-- View task status: `Get-ScheduledTask -TaskName "AutoTrade-SPY*"`
-- Run manually: `Start-ScheduledTask -TaskName "AutoTrade-SPY Daily Fetch"`
-- Check task history: Task Scheduler > right-click task > "View History"
+### Daily fetch not running
+- Verify cron schedule: `docker-compose exec daily-fetch cat /app/gateway/crontab`
+- Check supercronic logs: `docker-compose logs daily-fetch --tail 20`
+- Run manually: `docker-compose exec daily-fetch .venv/bin/python gateway/daily_fetch.py --days 1`
 
-### Port mismatch
-The API port must match in three places:
-1. `configs/default.yaml` — `ib_port: 7497`
-2. `%USERPROFILE%\Documents\IBC\config.ini` — `OverrideTwsApiPort=7497`
-3. IB Gateway settings — Configure > API > Settings > Socket port
+### Rebuilding after code changes
+If you modify `marketdata/`, `configs/`, or `gateway/` scripts:
+```bash
+docker-compose up -d --build
+```

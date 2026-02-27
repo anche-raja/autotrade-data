@@ -10,7 +10,7 @@ import asyncio
 import datetime as dt
 from zoneinfo import ZoneInfo
 
-from marketdata.config import PipelineConfig, load_config
+from marketdata.config import PipelineConfig
 from marketdata.ibkr.client import IBKRClient
 from marketdata.streaming.collector import StreamingCollector
 from marketdata.streaming.news_collector import NewsCollector
@@ -117,16 +117,16 @@ class StreamingService:
             try:
                 await bar_collector.stop()
             except Exception:
-                pass
+                log.debug("Failed to stop bar collector during cleanup", exc_info=True)
             try:
                 await news_collector.stop()
             except Exception:
-                pass
+                log.debug("Failed to stop news collector during cleanup", exc_info=True)
         finally:
             try:
                 await client.disconnect()
             except Exception:
-                pass
+                log.debug("Failed to disconnect client during cleanup", exc_info=True)
 
     async def _run_reconciliation(self) -> None:
         """Run historical fetch to fill gaps from the current day."""
@@ -162,7 +162,7 @@ class StreamingService:
             try:
                 await batch_client.disconnect()
             except Exception:
-                pass
+                log.debug("Failed to disconnect batch client", exc_info=True)
 
         log.info("Reconciliation complete")
 

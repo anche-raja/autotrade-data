@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import pyarrow.parquet as pq
 import pytest
 
 from marketdata.config import PipelineConfig, StreamingConfig

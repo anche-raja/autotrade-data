@@ -15,7 +15,7 @@ UTC = ZoneInfo("UTC")
 class TestCleanBars:
     """Tests for sort + dedup logic."""
 
-    def test_partition_writer_dedup_and_sort(self, sample_1min_df: pd.DataFrame) -> None:
+    def test_clean_bars_dedup_and_sort(self, sample_1min_df: pd.DataFrame) -> None:
         """Given unsorted data with duplicates, clean_bars returns sorted, unique rows."""
         # Reverse the df and add duplicate timestamps
         df = sample_1min_df.iloc[::-1].reset_index(drop=True)  # reversed
@@ -37,6 +37,9 @@ class TestCleanBars:
         first_ts = sample_1min_df["ts_utc"].iloc[0]
         row = cleaned.loc[cleaned["ts_utc"] == first_ts]
         assert row["close"].iloc[0] == 999.0
+
+        # Deduped data should have quality_flags set to "deduped"
+        assert (cleaned["quality_flags"] == "deduped").all()
 
     def test_clean_empty_df(self) -> None:
         """clean_bars handles empty DataFrame gracefully."""

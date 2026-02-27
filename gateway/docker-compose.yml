@@ -1,0 +1,71 @@
+services:
+  ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:stable
+    container_name: ib-gateway
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    ports:
+      # Paper trading API port (container 4002 -> host 4002)
+      - "127.0.0.1:4002:4002"
+      # VNC for debugging (optional, remove in production)
+      - "127.0.0.1:5900:5900"
+    volumes:
+      # Persist Gateway settings between restarts
+      - ib-gateway-settings:/home/ibgateway/Jts
+    ulimits:
+      nofile:
+        soft: 10000
+        hard: 10000
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/4002'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+
+  streaming:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: autotrade-streaming
+    restart: unless-stopped
+    command: .venv/bin/python gateway/streaming_service.py
+    depends_on:
+      ib-gateway:
+        condition: service_healthy
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - ../data:/app/data
+
+  twitter:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: autotrade-twitter
+    restart: unless-stopped
+    command: .venv/bin/python gateway/twitter_service.py
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - ../data:/app/data
+
+  daily-fetch:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: autotrade-daily-fetch
+    restart: unless-stopped
+    init: true
+    command: supercronic /app/gateway/crontab
+    depends_on:
+      ib-gateway:
+        condition: service_healthy
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - ../data:/app/data
+
+volumes:
+  ib-gateway-settings:

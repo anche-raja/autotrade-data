@@ -29,7 +29,7 @@ def main() -> None:
     collector = TweetCollector(cfg)
 
     def _signal_handler(sig: int, frame: object) -> None:
-        collector._running = False
+        collector.request_shutdown()
 
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)

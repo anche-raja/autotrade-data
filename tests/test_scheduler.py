@@ -6,8 +6,6 @@ import datetime as dt
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-import pytest
-
 from marketdata.config import PipelineConfig, StreamingConfig
 from marketdata.streaming.scheduler import SessionScheduler
 

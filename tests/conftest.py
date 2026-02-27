@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import datetime as dt
 from pathlib import Path
+from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pytest
+
+from marketdata.config import PipelineConfig, StreamingConfig
 
 UTC = ZoneInfo("UTC")
 
@@ -64,3 +67,34 @@ def sample_5sec_df() -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
+
+
+@pytest.fixture()
+def make_pipeline_cfg(tmp_path: Path):
+    """Factory fixture: create a PipelineConfig pointing at a temp dir."""
+
+    def _make(**overrides) -> PipelineConfig:
+        defaults = {
+            "data_dir": str(tmp_path),
+            "streaming": StreamingConfig(
+                symbols=["SPY"],
+                bar_sizes=["5sec", "1min"],
+                flush_interval_sec=1,
+            ),
+        }
+        defaults.update(overrides)
+        return PipelineConfig(**defaults)
+
+    return _make
+
+
+@pytest.fixture()
+def mock_ibkr_client() -> MagicMock:
+    """Create a mock IBKRClient with the methods StreamingCollector needs."""
+    client = MagicMock()
+    client.subscribe_realtime_bars = MagicMock(return_value=MagicMock(updateEvent=MagicMock()))
+    client.cancel_realtime_bars = MagicMock()
+    client.register_reconnect_callback = MagicMock()
+    client.ib = MagicMock()
+    client.ib.disconnectedEvent = MagicMock()
+    return client

@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pyarrow.parquet as pq
-import pytest
 
 from marketdata.pipeline.storage import TWEET_SCHEMA, tweets_partition_path
 from marketdata.twitter.collector import TweetCollector

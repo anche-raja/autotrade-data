@@ -311,8 +311,8 @@ def tweets(
     from marketdata.twitter.collector import TweetCollector
 
     collector = TweetCollector(cfg)
-    _signal.signal(_signal.SIGINT, lambda *_: setattr(collector, "_running", False))
-    _signal.signal(_signal.SIGTERM, lambda *_: setattr(collector, "_running", False))
+    _signal.signal(_signal.SIGINT, lambda *_: collector.request_shutdown())
+    _signal.signal(_signal.SIGTERM, lambda *_: collector.request_shutdown())
 
     async def _run() -> int:
         await collector.start()

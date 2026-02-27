@@ -13,9 +13,9 @@ from marketdata.config import PipelineConfig
 from marketdata.ibkr.client import IBKRClient
 from marketdata.ibkr.contracts import get_bar_contract
 from marketdata.pipeline.storage import (
-    _normalize_bar_label,
     bars_partition_path,
     merge_partition,
+    normalize_bar_label,
 )
 from marketdata.streaming.aggregator import BarAggregator
 from marketdata.utils.log import get_logger
@@ -151,7 +151,7 @@ class StreamingCollector:
                     df["_date"] = df["ts_utc"].dt.date
                     for date_val, group in df.groupby("_date"):
                         date_str = date_val.isoformat()
-                        bar_label = _normalize_bar_label(bar_size)
+                        bar_label = normalize_bar_label(bar_size)
                         path = bars_partition_path(
                             self._cfg.parquet_root, symbol, bar_label, date_str,
                         )

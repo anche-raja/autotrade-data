@@ -10,6 +10,7 @@ import pandas as pd
 from marketdata.pipeline.storage import (
     bars_partition_path,
     breadth_partition_path,
+    merge_partition,
     read_partition,
     write_partition,
 )
@@ -83,3 +84,56 @@ class TestWriteRead:
 
         assert (loaded["source"] == "ibkr").all()
         assert (loaded["quality_flags"] == "ok").all()
+
+
+class TestMergePartition:
+    """Test merge_partition dedup and source preference logic."""
+
+    def test_merge_creates_new_file(
+        self, tmp_data_dir: Path, sample_1min_df: pd.DataFrame
+    ) -> None:
+        """merge_partition creates a new file when none exists."""
+        path = bars_partition_path(tmp_data_dir, "SPY", "1min", "2025-09-15")
+        checksum = merge_partition(sample_1min_df, path)
+        assert len(checksum) == 64
+
+        loaded = read_partition(path)
+        assert len(loaded) == len(sample_1min_df)
+
+    def test_merge_deduplicates_by_timestamp(
+        self, tmp_data_dir: Path, sample_1min_df: pd.DataFrame
+    ) -> None:
+        """Merging overlapping data deduplicates by ts_utc."""
+        path = bars_partition_path(tmp_data_dir, "SPY", "1min", "2025-09-15")
+
+        # Write initial data
+        write_partition(sample_1min_df, path)
+
+        # Merge the same data again — should not create duplicates
+        merge_partition(sample_1min_df, path)
+
+        loaded = read_partition(path)
+        assert len(loaded) == len(sample_1min_df)
+
+    def test_merge_prefer_source(
+        self, tmp_data_dir: Path, sample_1min_df: pd.DataFrame
+    ) -> None:
+        """When prefer_source is set, rows from that source win on dedup."""
+        path = bars_partition_path(tmp_data_dir, "SPY", "1min", "2025-09-15")
+
+        # Write initial data with source=ibkr_stream
+        stream_df = sample_1min_df.copy()
+        stream_df["source"] = "ibkr_stream"
+        stream_df["quality_flags"] = "live"
+        write_partition(stream_df, path)
+
+        # Merge new data with source=ibkr, preferring ibkr
+        batch_df = sample_1min_df.copy()
+        batch_df["source"] = "ibkr"
+        batch_df["quality_flags"] = "ok"
+        merge_partition(batch_df, path, prefer_source="ibkr")
+
+        loaded = read_partition(path)
+        assert len(loaded) == len(sample_1min_df)
+        # All rows should now be from the preferred source
+        assert (loaded["source"] == "ibkr").all()

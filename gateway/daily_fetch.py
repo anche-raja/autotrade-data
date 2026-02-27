@@ -18,19 +18,19 @@ import logging
 import socket
 import sys
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any, TypeVar
 
-from marketdata.config import load_config
+from marketdata.config import PipelineConfig, load_config
 from marketdata.utils.log import setup_logging
+
+T = TypeVar("T")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOG_FILE = PROJECT_ROOT / "data" / "logs" / "daily_fetch.log"
 
 # --- Configuration ---
-BAR_SYMBOLS = ["SPY", "QQQ"]
-BAR_SIZES = ["1min", "5sec"]
-NEWS_SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL"]
-NEWS_PROVIDERS = "BZ+DJ-N+DJ-RT+FLY+BRFG+BRFUPDN"
 DEFAULT_LOOKBACK_DAYS = 3  # fetch last N days to catch gaps from missed runs
 GATEWAY_WAIT_TIMEOUT = 300  # seconds to wait for Gateway
 GATEWAY_POLL_INTERVAL = 10  # seconds between connectivity checks
@@ -94,7 +94,7 @@ def wait_for_gateway(host: str, port: int, timeout: int = GATEWAY_WAIT_TIMEOUT) 
 
 
 async def fetch_bars(
-    cfg,
+    cfg: PipelineConfig,
     symbols: list[str],
     bar_sizes: list[str],
     start: dt.date,
@@ -117,7 +117,11 @@ async def fetch_bars(
 
 
 async def fetch_news(
-    cfg, symbols: list[str], providers: str, start: dt.date, end: dt.date
+    cfg: PipelineConfig,
+    symbols: list[str],
+    providers: str,
+    start: dt.date,
+    end: dt.date,
 ) -> dict[str, int]:
     from marketdata.db.duck import MetadataDB
     from marketdata.ibkr.client import IBKRClient
@@ -151,7 +155,12 @@ async def fetch_news(
     return total
 
 
-async def run_with_retry(name: str, coro_fn, max_retries: int = MAX_PHASE_RETRIES, **kwargs):
+async def run_with_retry(
+    name: str,
+    coro_fn: Callable[..., Awaitable[T]],
+    max_retries: int = MAX_PHASE_RETRIES,
+    **kwargs: Any,
+) -> T | None:
     """Run an async function with retries on failure."""
     log = logging.getLogger("daily_fetch")
     for attempt in range(max_retries + 1):
@@ -199,16 +208,22 @@ async def main() -> None:
             log.error("Aborting: IB Gateway not available")
             sys.exit(1)
 
+    # Read symbols from config (streaming section is the canonical source)
+    bar_symbols = cfg.streaming.symbols
+    bar_sizes = cfg.streaming.bar_sizes
+    news_symbols = cfg.streaming.news_symbols
+    news_providers = "+".join(cfg.streaming.news_providers)
+
     # Fetch bars with retry
     use_rth = not args.no_rth
     if not args.news_only:
-        log.info("Fetching bars: symbols=%s sizes=%s rth=%s", BAR_SYMBOLS, BAR_SIZES, use_rth)
+        log.info("Fetching bars: symbols=%s sizes=%s rth=%s", bar_symbols, bar_sizes, use_rth)
         bar_results = await run_with_retry(
             "Bar fetch",
             fetch_bars,
             cfg=cfg,
-            symbols=BAR_SYMBOLS,
-            bar_sizes=BAR_SIZES,
+            symbols=bar_symbols,
+            bar_sizes=bar_sizes,
             start=start,
             end=today,
             rth=use_rth,
@@ -219,13 +234,13 @@ async def main() -> None:
 
     # Fetch news with retry
     if not args.bars_only:
-        log.info("Fetching news: symbols=%s", NEWS_SYMBOLS)
+        log.info("Fetching news: symbols=%s", news_symbols)
         news_results = await run_with_retry(
             "News fetch",
             fetch_news,
             cfg=cfg,
-            symbols=NEWS_SYMBOLS,
-            providers=NEWS_PROVIDERS,
+            symbols=news_symbols,
+            providers=news_providers,
             start=start,
             end=today,
         )
