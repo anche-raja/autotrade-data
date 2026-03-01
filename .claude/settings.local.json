@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run marketdata:*)",
+      "WebFetch(domain:www.interactivebrokers.com)"
+    ]
+  }
+}

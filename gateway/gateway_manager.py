@@ -31,7 +31,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GATEWAY_DIR = Path(__file__).resolve().parent
-START_SCRIPT = GATEWAY_DIR / "start_gateway.bat"
 LOG_DIR = PROJECT_ROOT / "data" / "logs"
 
 # Defaults — read from config if available, fallback to these
@@ -66,6 +65,13 @@ def is_port_open(host: str, port: int, timeout: float = 3.0) -> bool:
 
 def find_gateway_process() -> int | None:
     """Find running IB Gateway Java process, return PID or None."""
+    if sys.platform == "win32":
+        return _find_gateway_windows()
+    return _find_gateway_unix()
+
+
+def _find_gateway_windows() -> int | None:
+    """Find Gateway process on Windows via PowerShell."""
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
@@ -97,6 +103,20 @@ def find_gateway_process() -> int | None:
     return None
 
 
+def _find_gateway_unix() -> int | None:
+    """Find Gateway process on macOS/Linux via pgrep."""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "ibgateway"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.stdout.strip():
+            return int(result.stdout.strip().splitlines()[0])
+    except Exception:
+        pass
+    return None
+
+
 def get_status(host: str, port: int) -> dict:
     """Get comprehensive Gateway status."""
     pid = find_gateway_process()
@@ -113,27 +133,44 @@ def get_status(host: str, port: int) -> dict:
 
 def start_gateway() -> bool:
     """Launch IB Gateway via IBC start script. Returns True if process launched."""
-    if not START_SCRIPT.exists():
-        log.error("Start script not found: %s", START_SCRIPT)
-        return False
-
-    log.info("Launching IB Gateway via %s", START_SCRIPT.name)
-    try:
-        # Use CREATE_NEW_CONSOLE so the batch script gets proper handles.
-        # DETACHED_PROCESS breaks IBC's batch parsing ("set was unexpected").
-        subprocess.Popen(
-            ["cmd.exe", "/c", str(START_SCRIPT)],
-            cwd=str(PROJECT_ROOT),
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
-        return True
-    except Exception:
-        log.exception("Failed to launch Gateway")
-        return False
+    if sys.platform == "win32":
+        script = GATEWAY_DIR / "start_gateway.bat"
+        if not script.exists():
+            log.error("Start script not found: %s", script)
+            return False
+        log.info("Launching IB Gateway via %s", script.name)
+        try:
+            subprocess.Popen(
+                ["cmd.exe", "/c", str(script)],
+                cwd=str(PROJECT_ROOT),
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+            return True
+        except Exception:
+            log.exception("Failed to launch Gateway")
+            return False
+    else:
+        script = GATEWAY_DIR / "start_gateway.sh"
+        if not script.exists():
+            log.error("Start script not found: %s", script)
+            return False
+        log.info("Launching IB Gateway via %s", script.name)
+        try:
+            subprocess.Popen(
+                ["bash", str(script)],
+                cwd=str(PROJECT_ROOT),
+                start_new_session=True,
+            )
+            return True
+        except Exception:
+            log.exception("Failed to launch Gateway")
+            return False
 
 
 def stop_gateway() -> bool:
     """Stop running IB Gateway process."""
+    import signal as _signal
+
     pid = find_gateway_process()
     if pid is None:
         log.info("No Gateway process found")
@@ -141,11 +178,14 @@ def stop_gateway() -> bool:
 
     log.info("Stopping Gateway process (PID %d)", pid)
     try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue"],
-            timeout=15,
-        )
+        if sys.platform == "win32":
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue"],
+                timeout=15,
+            )
+        else:
+            os.kill(pid, _signal.SIGTERM)
         time.sleep(2)
         if find_gateway_process() is None:
             log.info("Gateway stopped successfully")

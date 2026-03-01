@@ -48,7 +48,14 @@ async def main():
         # Fallback: launch with user's Chrome profile
         # This requires Chrome to be closed
         import os
-        user_data = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "User Data")
+        if sys.platform == "darwin":
+            user_data = os.path.expanduser(
+                "~/Library/Application Support/Google/Chrome"
+            )
+        else:
+            user_data = os.path.join(
+                os.environ.get("LOCALAPPDATA", ""), "Google", "Chrome", "User Data"
+            )
 
         try:
             context = await p.chromium.launch_persistent_context(

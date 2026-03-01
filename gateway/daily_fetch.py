@@ -1,7 +1,7 @@
 """Daily data fetch script for IBKR market data.
 
 Fetches recent bars (1min, 5sec) and news for configured tickers.
-Designed to run daily after market close via Windows Task Scheduler.
+Designed to run daily after market close via Docker cron, launchd, or Task Scheduler.
 Waits for IB Gateway to be available and retries on connection failures.
 
 Usage:
