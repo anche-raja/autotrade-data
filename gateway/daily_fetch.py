@@ -156,16 +156,29 @@ async def fetch_news(
 
 
 async def fetch_events(cfg: PipelineConfig) -> dict[str, int]:
-    """Fetch calendar events from Finnhub (no IB Gateway needed)."""
-    from marketdata.pipeline.events import FinnhubEventsProvider
+    """Fetch calendar events from Finnhub + FMP (no IB Gateway needed)."""
+    from marketdata.pipeline.events import FinnhubEventsProvider, FmpEconomicProvider
 
+    log = logging.getLogger("daily_fetch")
+    all_results: dict[str, int] = {}
+
+    # Finnhub: earnings + IPO
     try:
-        provider = FinnhubEventsProvider(cfg)
-        return await provider.fetch_all()
+        finnhub = FinnhubEventsProvider(cfg)
+        results = await finnhub.fetch_all()
+        all_results.update(results)
     except ValueError as exc:
-        log = logging.getLogger("daily_fetch")
-        log.warning("Events fetch skipped: %s", exc)
-        return {}
+        log.warning("Finnhub events skipped: %s", exc)
+
+    # FMP: economic calendar
+    try:
+        fmp = FmpEconomicProvider(cfg)
+        results = await fmp.fetch_all()
+        all_results.update({f"fmp_{k}": v for k, v in results.items()})
+    except ValueError as exc:
+        log.warning("FMP economic events skipped: %s", exc)
+
+    return all_results
 
 
 async def run_with_retry(

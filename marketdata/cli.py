@@ -342,7 +342,7 @@ def fetch_events(
     end: str = typer.Option("", help="End date YYYY-MM-DD (default: today + lookahead)"),
     log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
 ) -> None:
-    """Fetch calendar events (earnings, economic, IPO, dividends, splits) from Finnhub."""
+    """Fetch calendar events from Finnhub (earnings/IPO) and FMP (economic)."""
     setup_logging(log_level)
     log = get_logger(__name__)
     cfg = load_config()
@@ -353,10 +353,27 @@ def fetch_events(
     log.info("Fetching events: start=%s end=%s", start_date, end_date)
 
     async def _run() -> dict[str, int]:
-        from marketdata.pipeline.events import FinnhubEventsProvider
+        from marketdata.pipeline.events import FinnhubEventsProvider, FmpEconomicProvider
 
-        provider = FinnhubEventsProvider(cfg)
-        return await provider.fetch_all(start_date, end_date)
+        all_results: dict[str, int] = {}
+
+        # Finnhub: earnings + IPO
+        try:
+            finnhub = FinnhubEventsProvider(cfg)
+            results = await finnhub.fetch_all(start_date, end_date)
+            all_results.update(results)
+        except ValueError as exc:
+            log.warning("Finnhub skipped: %s", exc)
+
+        # FMP: economic calendar
+        try:
+            fmp = FmpEconomicProvider(cfg)
+            results = await fmp.fetch_all(start_date, end_date)
+            all_results.update({f"fmp_{k}": v for k, v in results.items()})
+        except ValueError as exc:
+            log.warning("FMP skipped: %s", exc)
+
+        return all_results
 
     results = asyncio.run(_run())
     console = get_console()

@@ -114,9 +114,10 @@ class TradingConfig(BaseModel):
 
 
 class EventsConfig(BaseModel):
-    """Configuration for Finnhub events calendar collection."""
+    """Configuration for events calendar collection (Finnhub + FMP)."""
 
     finnhub_api_key: str = ""
+    fmp_api_key: str = ""
     lookback_days: int = 7
     lookahead_days: int = 30
     dividend_symbols: list[str] = Field(

@@ -1,7 +1,10 @@
-"""Finnhub events calendar: earnings, economic, IPO, dividend, split data.
+"""Events calendar: earnings, economic, IPO, dividend, split data.
 
-Fetches calendar data from Finnhub's free API (60 calls/min) and stores
-as Hive-partitioned Parquet under ``dataset=events/date=YYYY-MM-DD/``.
+Providers:
+  - Finnhub (free): earnings, IPO (economic/dividend/split are premium-only)
+  - FMP / Financial Modeling Prep (free 250 req/day): economic calendar
+
+Stores as Hive-partitioned Parquet under ``dataset=events/date=YYYY-MM-DD/``.
 """
 
 from __future__ import annotations
@@ -60,39 +63,20 @@ class FinnhubEventsProvider:
         counts: dict[str, int] = {}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # 1. Earnings calendar
+            # 1. Earnings calendar (free tier)
             earnings = await self._fetch_earnings(client, start_str, end_str, now)
             counts["earnings"] = len(earnings)
             await asyncio.sleep(self._rate_delay)
 
-            # 2. Economic calendar
-            economic = await self._fetch_economic(client, start_str, end_str, now)
-            counts["economic"] = len(economic)
-            await asyncio.sleep(self._rate_delay)
-
-            # 3. IPO calendar
+            # 2. IPO calendar (free tier)
             ipos = await self._fetch_ipos(client, start_str, end_str, now)
             counts["ipo"] = len(ipos)
-            await asyncio.sleep(self._rate_delay)
 
-            # 4. Dividends (per-symbol)
-            all_dividends: list[dict[str, Any]] = []
-            for sym in self._cfg.events.dividend_symbols:
-                divs = await self._fetch_dividends(client, sym, start_str, end_str, now)
-                all_dividends.extend(divs)
-                await asyncio.sleep(self._rate_delay)
-            counts["dividend"] = len(all_dividends)
-
-            # 5. Splits (per-symbol)
-            all_splits: list[dict[str, Any]] = []
-            for sym in self._cfg.events.dividend_symbols:
-                splits = await self._fetch_splits(client, sym, start_str, end_str, now)
-                all_splits.extend(splits)
-                await asyncio.sleep(self._rate_delay)
-            counts["split"] = len(all_splits)
+            # NOTE: economic, dividend, split endpoints are premium-only on
+            # Finnhub free tier (403). Economic events come from FMP instead.
 
         # Combine and write
-        all_records = earnings + economic + ipos + all_dividends + all_splits
+        all_records = earnings + ipos
         if all_records:
             self._write_partitions(all_records)
 
@@ -380,6 +364,142 @@ class FinnhubEventsProvider:
             path = events_partition_path(root, date)
             merge_partition(df, path, schema=EVENTS_SCHEMA, dedup_col="event_id")
             log.info("Wrote %d events to %s", len(date_records), path)
+
+
+FMP_BASE = "https://financialmodelingprep.com/stable"
+
+
+class FmpEconomicProvider:
+    """Fetch economic calendar events from Financial Modeling Prep (free tier)."""
+
+    def __init__(self, cfg: PipelineConfig) -> None:
+        self._cfg = cfg
+        self._api_key = cfg.events.fmp_api_key
+        if not self._api_key:
+            raise ValueError(
+                "FMP API key not configured. "
+                "Get a free key at https://financialmodelingprep.com "
+                "and set events.fmp_api_key in config."
+            )
+
+    async def fetch_all(
+        self,
+        start: dt.date | None = None,
+        end: dt.date | None = None,
+    ) -> dict[str, int]:
+        """Fetch economic calendar and store as Parquet. Returns counts."""
+        today = dt.date.today()
+        if start is None:
+            start = today - dt.timedelta(days=self._cfg.events.lookback_days)
+        if end is None:
+            end = today + dt.timedelta(days=self._cfg.events.lookahead_days)
+
+        now = dt.datetime.now(dt.timezone.utc)
+        counts: dict[str, int] = {}
+
+        # FMP allows max 3-month range; chunk if needed
+        all_records: list[dict[str, Any]] = []
+        chunk_start = start
+        while chunk_start < end:
+            chunk_end = min(chunk_start + dt.timedelta(days=89), end)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                records = await self._fetch_economic(
+                    client, chunk_start.isoformat(), chunk_end.isoformat(), now
+                )
+                all_records.extend(records)
+            chunk_start = chunk_end + dt.timedelta(days=1)
+
+        counts["economic"] = len(all_records)
+
+        if all_records:
+            self._write_partitions(all_records)
+
+        log.info("FMP economic fetch complete: %s", counts)
+        return counts
+
+    async def _fetch_economic(
+        self,
+        client: httpx.AsyncClient,
+        start: str,
+        end: str,
+        now: dt.datetime,
+    ) -> list[dict[str, Any]]:
+        url = f"{FMP_BASE}/economic-calendar"
+        params = {"from": start, "to": end, "apikey": self._api_key}
+        try:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.HTTPStatusError as e:
+            log.error("FMP API error %s: %s", e.response.status_code, e)
+            return []
+        except Exception as e:
+            log.error("FMP request failed: %s", e)
+            return []
+
+        if not isinstance(data, list):
+            log.warning("FMP returned unexpected format: %s", type(data))
+            return []
+
+        log.info("Fetched %d economic events from FMP", len(data))
+        records = []
+        for e in data:
+            event_name = e.get("event", "")
+            date_str = e.get("date", "")
+            if not date_str:
+                continue
+            # FMP date can be "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD"
+            event_date = date_str[:10]
+            event_time = date_str[11:16] if len(date_str) > 10 else ""
+
+            country = e.get("country", "")
+            # Synthetic ID from event + date + country
+            id_source = f"{event_name}-{date_str}-{country}"
+            event_id = f"econ-fmp-{hashlib.md5(id_source.encode()).hexdigest()[:12]}"
+
+            # FMP impact: "High", "Medium", "Low" or None
+            impact_raw = e.get("impact", "")
+            impact = impact_raw.lower() if impact_raw else ""
+
+            records.append(
+                {
+                    "event_id": event_id,
+                    "event_type": "economic",
+                    "event_date": event_date,
+                    "event_time": event_time,
+                    "symbol": "",
+                    "title": event_name,
+                    "country": country,
+                    "impact": impact,
+                    "estimate": _safe_float(e.get("estimate", e.get("consensus"))),
+                    "actual": _safe_float(e.get("actual")),
+                    "previous": _safe_float(e.get("previous")),
+                    "currency": e.get("currency", ""),
+                    "unit": e.get("unit", ""),
+                    "details_json": json.dumps(
+                        {
+                            "change": e.get("change"),
+                            "changePercentage": e.get("changePercentage"),
+                        }
+                    ),
+                    "source": "fmp",
+                    "fetched_at": now,
+                }
+            )
+        return records
+
+    def _write_partitions(self, records: list[dict[str, Any]]) -> None:
+        """Group records by event_date and merge into Parquet partitions."""
+        by_date: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for r in records:
+            by_date[r["event_date"]].append(r)
+
+        root = self._cfg.parquet_root
+        for date, date_records in by_date.items():
+            df = pd.DataFrame(date_records)
+            path = events_partition_path(root, date)
+            merge_partition(df, path, schema=EVENTS_SCHEMA, dedup_col="event_id")
+            log.info("Wrote %d economic events to %s", len(date_records), path)
 
 
 def _safe_float(val: Any) -> float | None:

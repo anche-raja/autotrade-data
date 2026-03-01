@@ -156,10 +156,12 @@ trading:
   order_timeout_sec: 30.0
   log_dir: "data/trading"
 
-# Finnhub events calendar
-# API key: free at https://finnhub.io — set via env: MD_EVENTS__FINNHUB_API_KEY
+# Events calendar (Finnhub for earnings/IPO, FMP for economic)
+# Finnhub: free at https://finnhub.io
+# FMP: free at https://financialmodelingprep.com (250 requests/day)
 events:
   finnhub_api_key: "d6i8bahr01ql9cifbelgd6i8bahr01ql9cifbem0"
+  fmp_api_key: "r0lBWaI6Zg0lhEkzG6Ugl5X21x2TmvOL"
   lookback_days: 7
   lookahead_days: 30
   dividend_symbols:
