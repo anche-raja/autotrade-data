@@ -155,6 +155,19 @@ async def fetch_news(
     return total
 
 
+async def fetch_events(cfg: PipelineConfig) -> dict[str, int]:
+    """Fetch calendar events from Finnhub (no IB Gateway needed)."""
+    from marketdata.pipeline.events import FinnhubEventsProvider
+
+    try:
+        provider = FinnhubEventsProvider(cfg)
+        return await provider.fetch_all()
+    except ValueError as exc:
+        log = logging.getLogger("daily_fetch")
+        log.warning("Events fetch skipped: %s", exc)
+        return {}
+
+
 async def run_with_retry(
     name: str,
     coro_fn: Callable[..., Awaitable[T]],
@@ -247,6 +260,13 @@ async def main() -> None:
         if news_results:
             for key, count in news_results.items():
                 log.info("  %s: %d articles", key, count)
+
+    # Fetch events (no Gateway needed — uses Finnhub REST API)
+    log.info("Fetching calendar events from Finnhub")
+    event_results = await run_with_retry("Events fetch", fetch_events, cfg=cfg)
+    if event_results:
+        for key, count in event_results.items():
+            log.info("  %s: %d events", key, count)
 
     log.info("Daily fetch complete")
 

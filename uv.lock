@@ -57,6 +57,7 @@ source = { editable = "." }
 dependencies = [
     { name = "browser-cookie3" },
     { name = "duckdb" },
+    { name = "httpx" },
     { name = "ib-async" },
     { name = "pandas" },
     { name = "pandas-market-calendars" },
@@ -81,6 +82,7 @@ dev = [
 requires-dist = [
     { name = "browser-cookie3", specifier = ">=0.20.1" },
     { name = "duckdb", specifier = ">=0.10.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "ib-async", specifier = ">=1.0.0" },
     { name = "pandas", specifier = ">=2.1.0" },
     { name = "pandas-market-calendars", specifier = ">=4.3.0" },

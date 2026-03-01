@@ -135,3 +135,41 @@ twitter:
 notifications:
   whatsapp_enabled: false
   whatsapp_phone: ""
+
+# Live SPXW auto-trading (ORB breakout)
+# Enable via env: MD_TRADING__ENABLED=true
+trading:
+  enabled: false
+  client_id: 21
+  symbol: "SPY"
+  range_minutes: 20
+  no_entry_before: "09:50"
+  direction: "long"
+  tp_spy_dollars: 0.60
+  stop_buffer: 0.50
+  max_trades_per_day: 1
+  num_contracts: 1
+  time_exit: "15:55"
+  paper_mode: true
+  max_option_price: 20.0
+  min_option_price: 0.10
+  order_timeout_sec: 30.0
+  log_dir: "data/trading"
+
+# Finnhub events calendar
+# API key: free at https://finnhub.io — set via env: MD_EVENTS__FINNHUB_API_KEY
+events:
+  finnhub_api_key: "d6i8bahr01ql9cifbelgd6i8bahr01ql9cifbem0"
+  lookback_days: 7
+  lookahead_days: 30
+  dividend_symbols:
+    - SPY
+    - QQQ
+    - AAPL
+    - MSFT
+    - NVDA
+    - TSLA
+    - AMZN
+    - META
+    - GOOGL
+  rate_limit_delay_sec: 1.1

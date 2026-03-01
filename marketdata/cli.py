@@ -332,6 +332,40 @@ def tweets(
 
 
 # ------------------------------------------------------------------
+# fetch-events
+# ------------------------------------------------------------------
+
+
+@app.command()
+def fetch_events(
+    start: str = typer.Option("", help="Start date YYYY-MM-DD (default: today - lookback)"),
+    end: str = typer.Option("", help="End date YYYY-MM-DD (default: today + lookahead)"),
+    log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
+) -> None:
+    """Fetch calendar events (earnings, economic, IPO, dividends, splits) from Finnhub."""
+    setup_logging(log_level)
+    log = get_logger(__name__)
+    cfg = load_config()
+
+    start_date = dt.date.fromisoformat(start) if start else None
+    end_date = dt.date.fromisoformat(end) if end else None
+
+    log.info("Fetching events: start=%s end=%s", start_date, end_date)
+
+    async def _run() -> dict[str, int]:
+        from marketdata.pipeline.events import FinnhubEventsProvider
+
+        provider = FinnhubEventsProvider(cfg)
+        return await provider.fetch_all(start_date, end_date)
+
+    results = asyncio.run(_run())
+    console = get_console()
+    console.print("\n[bold green]Events fetch complete![/bold green]")
+    for event_type, count in results.items():
+        console.print(f"  {event_type}: {count:,} events")
+
+
+# ------------------------------------------------------------------
 # validate
 # ------------------------------------------------------------------
 

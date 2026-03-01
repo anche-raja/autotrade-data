@@ -92,6 +92,41 @@ class NotificationsConfig(BaseModel):
     whatsapp_phone: str = ""
 
 
+class TradingConfig(BaseModel):
+    """Configuration for the live SPXW auto-trading service (ORB breakout)."""
+
+    enabled: bool = False
+    client_id: int = 21
+    symbol: str = "SPY"
+    range_minutes: int = 20
+    no_entry_before: str = "09:50"
+    direction: str = "long"
+    tp_spy_dollars: float = 0.60
+    stop_buffer: float = 0.50
+    max_trades_per_day: int = 1
+    num_contracts: int = 1
+    time_exit: str = "15:55"
+    paper_mode: bool = True
+    max_option_price: float = 20.0
+    min_option_price: float = 0.10
+    order_timeout_sec: float = 30.0
+    log_dir: str = "data/trading"
+
+
+class EventsConfig(BaseModel):
+    """Configuration for Finnhub events calendar collection."""
+
+    finnhub_api_key: str = ""
+    lookback_days: int = 7
+    lookahead_days: int = 30
+    dividend_symbols: list[str] = Field(
+        default_factory=lambda: [
+            "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL",
+        ]
+    )
+    rate_limit_delay_sec: float = 1.1
+
+
 class PipelineConfig(BaseSettings):
     """Top-level configuration for the market-data pipeline.
 
@@ -121,6 +156,8 @@ class PipelineConfig(BaseSettings):
     streaming: StreamingConfig = Field(default_factory=StreamingConfig)
     twitter: TwitterConfig = Field(default_factory=TwitterConfig)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
+    trading: TradingConfig = Field(default_factory=TradingConfig)
+    events: EventsConfig = Field(default_factory=EventsConfig)
 
     five_sec_availability_months: int = 6
 

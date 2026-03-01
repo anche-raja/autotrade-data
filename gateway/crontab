@@ -1,3 +1,6 @@
 # Daily fetch: 5 PM ET, weekdays (Mon-Fri)
 # Fetches last 3 days of bars + news to catch any gaps
 0 17 * * 1-5 cd /app && .venv/bin/python gateway/daily_fetch.py --days 3 2>&1
+
+# Events calendar: 6 AM ET daily (before market open, no Gateway needed)
+0 6 * * * cd /app && .venv/bin/marketdata fetch-events 2>&1

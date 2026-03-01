@@ -65,6 +65,27 @@ TWEET_SCHEMA = pa.schema(
     ]
 )
 
+EVENTS_SCHEMA = pa.schema(
+    [
+        pa.field("event_id", pa.string()),
+        pa.field("event_type", pa.string()),
+        pa.field("event_date", pa.string()),
+        pa.field("event_time", pa.string()),
+        pa.field("symbol", pa.string()),
+        pa.field("title", pa.string()),
+        pa.field("country", pa.string()),
+        pa.field("impact", pa.string()),
+        pa.field("estimate", pa.float64()),
+        pa.field("actual", pa.float64()),
+        pa.field("previous", pa.float64()),
+        pa.field("currency", pa.string()),
+        pa.field("unit", pa.string()),
+        pa.field("details_json", pa.string()),
+        pa.field("source", pa.string()),
+        pa.field("fetched_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
 
 # ------------------------------------------------------------------
 # Path helpers
@@ -106,6 +127,18 @@ def tweets_partition_path(
         ``root/dataset=tweets/account=elonmusk/date=2026-02-19/part.parquet``
     """
     return root / f"dataset=tweets/account={account}/date={date}/part.parquet"
+
+
+def events_partition_path(
+    root: Path,
+    date: str,
+) -> Path:
+    """Build Hive-style path for an events partition.
+
+    Returns something like:
+        ``root/dataset=events/date=2026-02-28/part.parquet``
+    """
+    return root / f"dataset=events/date={date}/part.parquet"
 
 
 def normalize_bar_label(bar_size: str) -> str:
